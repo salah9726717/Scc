@@ -2,6 +2,9 @@ const pages = ["home", "tasks", "invite", "withdrawals"];
 
 // ---------- Backend: Frontend -> API -> DB (auth = Telegram initData) ----------
 const tgApp = window.Telegram?.WebApp;
+// The mini app is hosted on Vercel while the API runs on Render.
+// Keep API requests pointed at the backend instead of the frontend origin.
+const API_BASE_URL = "https://scc-09h0.onrender.com/api";
 const STATE = {
   user: null, balance: 0, tasks: [], taskStates: {},
   daily: { days: [], collectedToday: false },
@@ -20,7 +23,7 @@ async function api(path, options = {}, retries = 0) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`/api${path}`, {
+      const res = await fetch(`${API_BASE_URL}${path}`, {
         method: options.body ? "POST" : "GET",
         headers: { "Content-Type": "application/json", Authorization: `tma ${tgApp?.initData || ""}` },
         body: options.body ? JSON.stringify(options.body) : undefined
