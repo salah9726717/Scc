@@ -2,6 +2,9 @@ const pages = ["home", "tasks", "invite", "withdrawals"];
 
 // ---------- Backend: Frontend -> API -> DB (auth = Telegram initData) ----------
 const tgApp = window.Telegram?.WebApp;
+// The mini app is hosted on Vercel while the API runs on Render.
+// Keep API requests pointed at the backend instead of the frontend origin.
+const API_BASE_URL = "https://scc-09h0.onrender.com/api";
 const STATE = {
   user: null, balance: 0, tasks: [], taskStates: {},
   daily: { days: [], collectedToday: false },
@@ -20,19 +23,32 @@ async function api(path, options = {}, retries = 0) {
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(`/api${path}`, {
-        method: options.body ? "POST" : "GET",
-        headers: { "Content-Type": "application/json", Authorization: `tma ${tgApp?.initData || ""}` },
-        body: options.body ? JSON.stringify(options.body) : undefined
+      const headers = { Accept: "application/json", Authorization: `tma ${tgApp?.initData || ""}` };
+      if (options.body !== undefined) headers["Content-Type"] = "application/json";
+      const res = await fetch(`${API_BASE_URL}${path}`, {
+        method: options.body !== undefined ? "POST" : "GET",
+        headers,
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) { const err = new Error(data.error || "Please try again."); err.status = res.status; throw err; }
+      const contentType = res.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await res.json()
+        : { error: `API returned an unexpected response (HTTP ${res.status}). Check the Render service and API URL.` };
+      if (!res.ok) {
+        const err = new Error(data.error || `API request failed (HTTP ${res.status}).`);
+        err.status = res.status;
+        throw err;
+      }
       return data;
     } catch (e) {
-      if (!e.status) e.message = "Connection problem. Check your internet and try again.";
+      // Preserve useful HTTP/API errors. A fetch TypeError usually means a
+      // network, DNS, TLS, or browser CORS failure; do not hide it as generic internet advice.
+      if (!e.status) {
+        e.message = "Could not reach the Sophia Company API. Check that the Render service is running, the API URL is correct, and CORS allows this frontend.";
+      }
       lastError = e;
       if ((e.status && e.status < 500) || attempt === retries) break;
-      await sleep(700 * (attempt + 1));
+      await sleep(1000 * (attempt + 1));
     }
   }
   throw lastError;
@@ -72,7 +88,7 @@ function updateSummary() {
   const balanceNode = document.getElementById("user-balance");
   const tasksNode = document.getElementById("user-tasks");
   if (balanceNode) balanceNode.textContent = formatMoney(getBalance());
-  if (tasksNode) tasksNode.textContent = `${TASK_LINKS.length}/${claimedTaskCount()}`;
+  if (tasksNode) tasksNode.textContent = `${claimedTaskCount()}/${TASK_LINKS.length}`;
 }
 
 const navItems = document.querySelectorAll(".nav-item");

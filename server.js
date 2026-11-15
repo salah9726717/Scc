@@ -80,6 +80,27 @@ async function auth(req, res, next) {
 // ---------- App ----------
 const app = express();
 app.set('trust proxy', 1);
+
+// The Mini App is hosted on a different origin from this Render API.
+// Allow the configured frontend origins; use '*' by default because the API
+// does not use cookie-based credentials (Telegram initData is verified server-side).
+const allowedOrigins = (process.env.FRONTEND_ORIGINS || '*')
+  .split(',').map((value) => value.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes('*')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '20kb' }));
 app.get('/health', (_, res) => res.json({ ok: true }));
 
